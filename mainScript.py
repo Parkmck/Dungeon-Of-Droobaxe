@@ -15,16 +15,17 @@ gamePaused = False
 
 screen = pygame.display.set_mode(size)
 
-#screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 #sounds
 sounds = ["sounds\dig_2.wav", "sounds\dig_0.wav", "sounds\Item_10.wav", "sounds\dig_1.wav", "sounds\Jump_0.wav", "sounds\hurt.wav"]
+
+        
 #___MUSIC___
 musicPosition = 0
 musicList = [r"sounds\background.mp3", r"sounds\Ruins_Background.mp3"]
 currMusicPlaying = r"sounds\background.mp3"
 pygame.mixer.music.load(r"sounds\background.mp3")
 pygame.mixer.music.play(-1)
-
 def changeMusic(newSong):
     global musicPosition, currMusicPlaying
     if newSong == musicList[1]:
@@ -68,6 +69,9 @@ def cropImage(im, transparency=0):
         surf.set_alpha(transparency)
     return surf
 
+#darkness = Surface(width, height)
+#darkness.fill((0,0,0))
+           
 #___SET_ICON___
 gameIcon = cropImage(r"images\gameIcon.png")
 pygame.display.set_icon(gameIcon)
@@ -134,6 +138,12 @@ class pauseScreenPart(pygame.sprite.Sprite):
         if self.buttonType == "unpause":
             #print("UNPAUSED")#DEBUG
             gamePaused = False
+        if self.buttonType == "quit":
+            RUNNING = False
+            pygame.display.quit()
+            pygame.quit()
+            sys.exit()
+            
             
         
 def newMenuBorder(im, rx, ry):
@@ -155,6 +165,7 @@ menuGameTile = pauseScreenPart(cropImage(r"images\pauseScreen\title.png"), 0, 39
 menuGameTile.centerPart()
 
 newMenuButton(cropImage(r"images\pauseScreen\button_x.png"), ((width // 36) * 36) - (36 + 18), 18, "unpause")
+newMenuButton(cropImage(r"images\pauseScreen\button_quit.png"), 18, 18, "quit")
 
 for i in range(0, height // 36):
     newMenuBorder(cropImage(r"images\pauseScreen\borderTileLeft.png"), 0, i * 36)
@@ -299,7 +310,7 @@ if len(healthBar) <= 0:
     newHeart()
     newHeart()
 refreshHealthBar()
-blueMan = player(r"images\player\player.png", [0, 0], 36, 36)
+blueMan = player(random.choice([r"images\player\player_Andre.png", r"images\player\player_Grenwald.png", r"images\player\player_Victoria.png", r"images\player\player_Viper.png"]), [0, 0], 36, 36)
 
 #___PROJECTILES___
 projectilesGroup = pygame.sprite.Group()
@@ -331,6 +342,11 @@ class projectile(pygame.sprite.Sprite):
                 sounds[4]
                 self.kill()
 
+        blocks_hit_list = pygame.sprite.spritecollide(self, propsGroup, False)
+        for i in blocks_hit_list:
+            if i.isBroken == False:
+                i.damageProp()
+                self.kill()
         #for currList in [enemysGroup]:
             #blocks_hit_list = pygame.sprite.spritecollide(self, currList, False)
             #for i in blocks_hit_list:
@@ -377,16 +393,17 @@ class body(pygame.sprite.Sprite):
 def newBody(im, rx, ry):
     theBody = body(im, rx, ry)
     bodysGroup.add(theBody)
-        
+
+    
 class enemy(pygame.sprite.Sprite):
-    def __init__(self, im, db, s, rx, ry, ad, es, sd):
+    def __init__(self, im, db, s, rx, ry, ad, es, si, h, nst, li, sd):
         pygame.sprite.Sprite.__init__(self)
         self.speed = s
         self.enemySpeed = es
         self.esI = es
-        self.frames = im
-        self.image = im[0]
-        self.deadBody = db
+        self.frames = self.enlargeFrames(si, im)
+        self.image =  pygame.transform.scale(im[0], (int(im[0].get_width() * si), int(im[0].get_height() * si)))
+        self.deadBody = pygame.transform.scale(db, (int(db.get_width() * si), int(db.get_height() * si)))
         self.onFrame = 0
         self.rect = self.image.get_rect()
         self.rect.x = rx
@@ -396,10 +413,17 @@ class enemy(pygame.sprite.Sprite):
         self.anamationDelay = ad
         self.adI = ad
         self.direction = "LEFT"
-        self.shootingData = sd #[canShoot, image, speed, size, fireRate, spread, gunBarrelPos]
-        if not self.shootingData[0] == False:
+        self.nextStage = nst
+        self.shootingData = sd #SHOOT- [canShoot, image, speed, size, fireRate, spread, gunBarrelPos] #SPAWN- [canShoot, spawnType, spawnRate, spawnPos]
+        self.health = h
+        self.hasLight = li
+        if not self.shootingData[0] == False and not self.shootingData[0] == "SPAWN":
+            self.shootingData[6] = self.shootingData[6] * si
             self.shootingDelay = self.shootingData[4]
             self.sdI = self.shootingData[4]
+        elif self.shootingData[0] == "SPAWN":
+            self.shootingDelay = self.shootingData[2]
+            self.sdI = self.shootingData[2]
         else:
             self.shootingDelay = 0
             self.sdI = 0
@@ -418,6 +442,11 @@ class enemy(pygame.sprite.Sprite):
         else:
             self.adI -= 1
 
+    def enlargeFrames(self, si, im):
+        enlargedList = []
+        for i in im:
+            enlargedList.append(pygame.transform.scale(i, (int(i.get_width() * si), int(i.get_height() * si))))
+        return enlargedList
     def chaseQuar(self, targetDirection):
         projectileSlope = [targetDirection[0] - self.rect.x, targetDirection[1] - self.rect.y]
         #print(projectileSlope)#DEBUG
@@ -442,8 +471,7 @@ class enemy(pygame.sprite.Sprite):
                 sounds[4]
                 if self.direction == "RIGHT":
                     self.deadBody = pygame.transform.flip(self.deadBody, True, False)
-                newBody(self.deadBody, self.x, self.y)
-                self.kill()
+                self.damage()
                 i.kill()
         if self.esI <= 0:            
             if True == True:
@@ -469,17 +497,30 @@ class enemy(pygame.sprite.Sprite):
             self.esI -= 1
 
     def shoot(self):
-        if not self.shootingData[0] == False:
+        if not self.shootingData[0] == False and not self.shootingData[0] == "SPAWN":
             if self.sdI <= 0:
                 launchProjectile([self.rect.x + self.shootingData[6][0], self.rect.y + self.shootingData[6][1]], [blueMan.rect.x + 16, blueMan.rect.y + 16], cropImage(self.shootingData[1]), self.shootingData[3], self.shootingData[2], self.shootingData[5], True)
                 self.sdI = self.shootingData[4]
             else:
                 self.sdI -= 1
+        elif self.shootingData[0] == "SPAWN":
+            if self.sdI <= 0:
+                spawnEnemy(self.shootingData[1], self.rect.x + self.shootingData[3][0], self.rect.y + self.shootingData[3][1])
+                self.sdI = self.shootingData[2]
+            else:
+                self.sdI -= 1
+            
     def damage(self):
-        
-        self.kill()
-def newEnemy(im, db, s, rx, ry, ad, es, sd=[False]):
-    theEnemy = enemy(im, db, s, rx, ry, ad, es, sd)
+        self.health -= 1
+        #print("Damaged!")#DEBUG
+        if self.health <= 0:
+            newBody(self.deadBody, self.x, self.y)
+            if not self.nextStage == "NONE":
+                spawnEnemy(self.nextStage, self.rect.x, self.rect.y)
+            self.kill()
+
+def newEnemy(im, db, s, rx, ry, ad, es, si, h, nst, li, sd=[False]):
+    theEnemy = enemy(im, db, s, rx, ry, ad, es, si, h, nst, li, sd)
     enemysGroup.add(theEnemy)
     
 def randomSpawnPoint(w):
@@ -491,27 +532,79 @@ def spawnEnemy(name, x="RAND", y="RAND"):
     if y == "RAND":
         y = randomSpawnPoint(height)
         
+    #___ruin___
     if name == "RuinBeatle":
-        newEnemy([cropImage(r"images\enemies\RuinBeatle\frame_0.png", 0), cropImage(r"images\enemies\RuinBeatle\frame_1.png", 0), cropImage(r"images\enemies\RuinBeatle\frame_0.png", 0), cropImage(r"images\enemies\RuinBeatle\frame_2.png", 0)], cropImage(r"images\enemies\RuinBeatle\dead_0.png"), [0,0], x, y, 15, 3)
+        newEnemy([cropImage(r"images\enemies\RuinBeatle\frame_0.png", 0), cropImage(r"images\enemies\RuinBeatle\frame_1.png", 0), cropImage(r"images\enemies\RuinBeatle\frame_0.png", 0), cropImage(r"images\enemies\RuinBeatle\frame_2.png", 0)], cropImage(r"images\enemies\RuinBeatle\dead_0.png"), [0,0], x, y, 15, 3, 1, 2, "NONE", False)
     elif name == "Fly":
-        newEnemy([cropImage(r"images\enemies\Fly\frame_0.png", 0), cropImage(r"images\enemies\Fly\frame_1.png", 0), cropImage(r"images\enemies\Fly\frame_2.png", 0), cropImage(r"images\enemies\Fly\frame_1.png", 0)], cropImage(r"images\enemies\Fly\dead_0.png"), [0,0], x, y, 2, 7,
+        newEnemy([cropImage(r"images\enemies\Fly\frame_0.png", 0), cropImage(r"images\enemies\Fly\frame_1.png", 0), cropImage(r"images\enemies\Fly\frame_2.png", 0), cropImage(r"images\enemies\Fly\frame_1.png", 0)], cropImage(r"images\enemies\Fly\dead_0.png"), [0,0], x, y, 2, 7, 1, 1, "NONE", False,
         [True, r"images\projectiles\smallFlyAcid.png", 1, 0.5, 250, 30, [16, 15]])
+    elif name == "RuinBossStage1":
+        newEnemy([cropImage(r"images\enemies\bosses\ruin\frame_0.png", 0), cropImage(r"images\enemies\bosses\ruin\frame_1.png", 0), cropImage(r"images\enemies\bosses\ruin\frame_0.png", 0), cropImage(r"images\enemies\bosses\ruin\frame_2.png", 0)], cropImage(r"images\enemies\bosses\ruin\dead_1.png"), [0,0], x, y, 15, 5, 5, 30, "RuinBossStage2", False,
+        ["SPAWN", "RedRuinBeatle", 250, [16, 10]])#RedRuinBeatle
+    elif name == "RuinBossStage2":
+        newEnemy([cropImage(r"images\enemies\bosses\ruin\frame_0.png", 0), cropImage(r"images\enemies\bosses\ruin\frame_1.png", 0), cropImage(r"images\enemies\bosses\ruin\frame_0.png", 0), cropImage(r"images\enemies\bosses\ruin\frame_2.png", 0)], cropImage(r"images\enemies\bosses\ruin\dead_0.png"), [0,0], x, y, 15, 2, 5, 30, "NONE", False,
+        ["SPAWN", "RedRuinBeatle", 210, [16, 10]])#RedRuinBeatle
+    elif name == "RedRuinBeatle":
+        newEnemy([cropImage(r"images\enemies\RedRuinBeatle\frame_0.png", 0), cropImage(r"images\enemies\RedRuinBeatle\frame_1.png", 0), cropImage(r"images\enemies\RedRuinBeatle\frame_0.png", 0), cropImage(r"images\enemies\RedRuinBeatle\frame_2.png", 0)], cropImage(r"images\enemies\RedRuinBeatle\dead_0.png"), [0,0], x, y, 15, 1, 0.7, 1, "NONE", False)
+    elif name == "GreenRuinBeatle":
+        newEnemy([cropImage(r"images\enemies\GreenRuinBeatle\frame_0.png", 0), cropImage(r"images\enemies\GreenRuinBeatle\frame_1.png", 0), cropImage(r"images\enemies\GreenRuinBeatle\frame_0.png", 0), cropImage(r"images\enemies\GreenRuinBeatle\frame_2.png", 0)], cropImage(r"images\enemies\GreenRuinBeatle\dead_0.png"), [0,0], x, y, 15, 4, 2.5, 4, "NONE", False)
+
+    #___crypt___
+    elif name == "Bones":
+        newEnemy([cropImage(r"images\enemies\Bones\frame_0.png", 0), cropImage(r"images\enemies\Bones\frame_1.png", 0)], cropImage(r"images\enemies\Bones\dead_0.png"), [0,0], x, y, 15, 4, 1, 3, "NONE", False)
+    elif name == "BonesMage":
+        newEnemy([cropImage(r"images\enemies\BonesMage\frame_0.png", 0), cropImage(r"images\enemies\BonesMage\frame_1.png", 0)], cropImage(r"images\enemies\BonesMage\dead_0.png"), [0,0], x, y, 2, 7, 1, 2, "NONE", 60,
+        [True, r"images\projectiles\smallFireball.png", 1, 0.7, 120, 30, [5, 32]])
+    elif name == "BonesDarkMage":
+        newEnemy([cropImage(r"images\enemies\BonesDarkMage\frame_0.png", 0), cropImage(r"images\enemies\BonesDarkMage\frame_1.png", 0)], cropImage(r"images\enemies\BonesDarkMage\dead_0.png"), [0,0], x, y, 2, 7, 1, 2, "NONE", 65,
+        [True, r"images\projectiles\darkFireball.png", 1, 0.7, 50, 30, [5, 32]])
 
 #___PROPS___
 propsGroup = pygame.sprite.Group()
 class prop(pygame.sprite.Sprite):
-    def __init__(self, im, rx, ry):
+    def __init__(self, im, rx, ry, l=False):
         pygame.sprite.Sprite.__init__(self)
-        self.image = im
+        self.images = im
+        self.image = im[0]
         self.rect = self.image.get_rect()
         self.rect.x = rx
         self.rect.y = ry
+        self.isBroken = False
+        self.currImage = 0
+        self.hasLight = l
 
-def newProp(im, rx, ry):
-    theProp = prop(im, rx, ry)
-    propsGroup.add(theProp)
+    def damageProp(self):
+        if self.currImage == len(self.images) - 2:
+            #playSound(sounds[6])
+            #self.kill()
+            self.image = self.images[len(self.images) - 1]
+            self.isBroken = True
+        else:
+            self.currImage += 1
+            self.image = self.images[self.currImage]
+    
+def newProp(im, rx, ry, l=False):
+    theProp = prop(im, rx, ry, l)
+    #propsGroup.add(theProp)
+    return theProp
 
-#newProp(cropImage(r"images\props\pots\clayPot.png"), 120, 120)
+def randSpot(a, propSize):
+    return 36 + (propSize * random.randint(0, (a - (36 * 2)) // propSize))
+
+propTypes = [
+    [[cropImage(r"images\props\pots\clayPot.png"), cropImage(r"images\props\pots\clayPotOvergrown.png"), cropImage(r"images\props\pots\clayPotBroken.png")], 0],
+    [[cropImage(r"images\props\pots\clayPotOvergrown.png"), cropImage(r"images\props\pots\clayPotBroken.png")], 0],
+    [[cropImage(r"images\props\lights\light1.png"), cropImage(r"images\props\lights\light1Broken.png")], 100]
+]
+
+def makeProps():
+    theProps = []
+    for i in range(5):
+        thePropData = random.choice(propTypes)
+        theProps.append(newProp(thePropData[0], randSpot(width, 33), randSpot(height, 33), thePropData[1]))
+    print(theProps)
+    return theProps
+
         
 #___ROOMS___
 def randomWallTiles(tileList):
@@ -530,9 +623,15 @@ class door(pygame.sprite.Sprite):
         if self.doorType == "NORM":
             self.image = pygame.image.load(r"images\doors\door.png")
             self.defDoor = pygame.image.load(r"images\doors\door.png")
+        elif self.doorType == "NORMBOSS":
+            self.image = pygame.image.load(r"images\doors\bossDoorBack.png")
+            self.defDoor = pygame.image.load(r"images\doors\bossDoorBack.png")
         elif self.doorType == "DEMON":
             self.image = pygame.image.load(r"images\doors\demonDoor.png")
             self.defDoor = pygame.image.load(r"images\doors\demonDoor.png")
+        elif self.doorType == "BOSS":
+            self.image = pygame.image.load(r"images\doors\bossDoor2.png")
+            self.defDoor = pygame.image.load(r"images\doors\bossDoor2.png")
         self.rect = self.image.get_rect()
         self.rect.x = rx - 1
         self.rect.y = ry - 1
@@ -542,7 +641,12 @@ class door(pygame.sprite.Sprite):
         self.doorMat = dm
 
     def useDoor(self):
-        global numOfRooms, currentRoom, displayPlayfeild, currentRoomPos
+        global numOfRooms, currentRoom, displayPlayfeild, currentRoomPos, rooms, propsGroup, roomBoss, bossDoorSpawned
+        rooms[currentRoom][4] = []
+        for i in propsGroup:
+            rooms[currentRoom][4].append(i)
+        for i in propsGroup:
+            i.kill()
         exitLoop = False
         while exitLoop == False:
             if not self.targetRoom == "NONE":
@@ -567,6 +671,8 @@ class door(pygame.sprite.Sprite):
                 currentRoom = self.targetRoom
                 if self.doorType == "DEMON":
                     damagePlayer(1)
+
+                    
                 for i in rooms[self.targetRoom][1]:
                     #print("i.doorId:", i.doorId, "| self.targetDoor:", self.targetDoor)#DEBUG
                     if i.doorId == self.targetDoor:
@@ -598,11 +704,18 @@ class door(pygame.sprite.Sprite):
                 numOfRooms += 1
                 IDsToUse = ["c", "d", "b", "a"]
                 doorSpotsToUse = ["TOP", "BOTTOM", "LEFT", "RIGHT"]
+                if self.doorType == "BOSS":
+                    IDsToUse = [a]
+                    doorSpotsToUse = ["BOTTOM"]
+                    roomBoss = True
                 
-                encaseRoom(self.targetRoom, randomWallTiles([[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]]))
+                #encaseRoom(self.targetRoom, randomWallTiles([[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]]))
                 if self.rect.y + 1 == ((height // 36) - 1) * 36:
                     theId = IDsToUse[len(IDsToUse) - 1]
-                    newDoor(self.rect.x + 1, 0, self.targetRoom, currentRoom, theId, self.doorId, "UP")
+                    if self.doorType == "BOSS":
+                        newDoor(self.rect.x + 1, 0, self.targetRoom, currentRoom, theId, self.doorId, "UP", "NORMBOSS")
+                    else:
+                        newDoor(self.rect.x + 1, 0, self.targetRoom, currentRoom, theId, self.doorId, "UP")
                     print("New top door made! DoorID:", theId)
                     doorSpotsToUse.remove("TOP")
                     IDsToUse.remove(theId)
@@ -610,7 +723,10 @@ class door(pygame.sprite.Sprite):
                     theId = None
                 elif self.rect.y + 1 == 0:
                     theId = IDsToUse[len(IDsToUse) - 1]
-                    newDoor(self.rect.x + 1, ((height // 36) * 36) - 36, self.targetRoom, currentRoom, theId, self.doorId, "DOWN")
+                    if self.doorType == "BOSS":
+                        newDoor(self.rect.x + 1, ((height // 36) * 36) - 36, self.targetRoom, currentRoom, theId, self.doorId, "DOWN", "NORMBOSS")
+                    else:
+                        newDoor(self.rect.x + 1, ((height // 36) * 36) - 36, self.targetRoom, currentRoom, theId, self.doorId, "DOWN")
                     print("New bottom door made! DoorID:", theId)
                     doorSpotsToUse.remove("BOTTOM")
                     IDsToUse.remove(theId)
@@ -618,7 +734,10 @@ class door(pygame.sprite.Sprite):
                     theId = None
                 elif self.rect.x + 1 == 0:
                     theId = IDsToUse[len(IDsToUse) - 1]
-                    newDoor(((width // 36) * 36) - 36, self.rect.y + 1, self.targetRoom, currentRoom, theId, self.doorId, "RIGHT")
+                    if self.doorType == "BOSS":
+                        newDoor(((width // 36) * 36) - 36, self.rect.y + 1, self.targetRoom, currentRoom, theId, self.doorId, "RIGHT", "NORMBOSS")
+                    else:
+                        newDoor(((width // 36) * 36) - 36, self.rect.y + 1, self.targetRoom, currentRoom, theId, self.doorId, "RIGHT")
                     print("New right door made! DoorID:", theId)
                     doorSpotsToUse.remove("RIGHT")
                     self.targetDoor = theId
@@ -626,13 +745,17 @@ class door(pygame.sprite.Sprite):
                     theId = None
                 elif self.rect.x + 1 == ((width // 36) * 36) - 36:
                     theId = IDsToUse[len(IDsToUse) - 1]
-                    newDoor(0, self.rect.y + 1, self.targetRoom, currentRoom, theId, self.doorId, "LEFT")
+                    if self.doorType == "BOSS":
+                        newDoor(0, self.rect.y + 1, self.targetRoom, currentRoom, theId, self.doorId, "LEFT", "NORMBOSS")
+                    else:
+                        newDoor(0, self.rect.y + 1, self.targetRoom, currentRoom, theId, self.doorId, "LEFT")
                     print("New left door made! DoorID:", theId)
                     doorSpotsToUse.remove("LEFT")
                     self.targetDoor = theId
                     IDsToUse.remove(theId)
                     theId = None
-
+                    
+                encaseRoom(self.targetRoom, randomTiles(tileSets))
                 def getOffset(d):
                     if d == "UP":
                         return [0, 1]
@@ -681,7 +804,11 @@ class door(pygame.sprite.Sprite):
                             else:
                                 if IDb == "TOP":
                                     if not canDoorBePlaced(IDb) == False:
-                                        newDoor((((width // 36) * 36) - 36) / 2, 0, self.targetRoom, "NONE", IDa, "a", "UP")
+                                        if random.randint(1,1) == 1 and not bossDoorSpawned == True and numOfRooms >= 10:
+                                            newDoor((((width // 36) * 36) - 36) / 2, 0, self.targetRoom, "NONE", IDa, "a", "UP", "BOSS")
+                                            bossDoorSpawned = True
+                                        else:
+                                            newDoor((((width // 36) * 36) - 36) / 2, 0, self.targetRoom, "NONE", IDa, "a", "UP")
                                         print("New top door made! DoorID:", IDa)
                                         IDsToUse.remove(IDa)
                                         if not [currentRoomPos[0] + getOffset(self.doorMat)[0], (currentRoomPos[1] + 1) + getOffset(self.doorMat)[1]] in roomPositions:
@@ -747,6 +874,8 @@ rooms = {}
 numOfRooms = 1
 currentRoomPos = [0,0]
 roomPositions = []
+roomBoss = False
+bossDoorSpawned = False
 try:
     currentRoom = currentRoom
 except NameError:
@@ -766,6 +895,9 @@ def loadRoom(theId):
         i.kill()
     for i in rooms[theId][1]:
         doorsGroup.add(i)
+    for i in rooms[theId][4]:
+        print(i)
+        propsGroup.add(i)
     theI = 0
     for i in rooms[theId][2]:
         if i == "NONE":
@@ -790,9 +922,14 @@ class wall(pygame.sprite.Sprite):
         self.rect.y = ry
 
       
+Ecombs = ["NONE"]
+isDarkInRoom = False
 
 def newDoor(x, y, roomId, targetRoom, doorId, targetDoor, doorMat, doorType="NORM"):
+    global roomBoss
     theDoor = door(x, y, doorId, targetRoom, targetDoor, doorMat, doorType)
+    def randomEnemies(e):
+        return random.choice(e)
     while True:
         try:
             rooms[roomId][1].append(theDoor)
@@ -801,16 +938,22 @@ def newDoor(x, y, roomId, targetRoom, doorId, targetDoor, doorMat, doorType="NOR
                     rooms[roomId][0].remove(i)
             break
         except KeyError:
-            rooms[roomId] = [[], [], ["NONE", "NONE"], ["Fly", "RuinBeatle", "RuinBeatle"]]
+            if not roomBoss == True:
+                rooms[roomId] = [[], [], ["NONE", "NONE"], randomEnemies(copy.deepcopy(Ecombs)), makeProps(), isDarkInRoom]
+            else:
+                rooms[roomId] = [[], [], ["NONE", "NONE"], ["RuinBossStage1"], [], False]
+                roomBoss = False
 
 def newWall(image, x, y, roomId):
     theWall = wall(image, x, y)
+    def randomEnemies(e):
+        return random.choice(e)
     while True:
         try:
             rooms[roomId][0].append(theWall)
             break
         except KeyError:
-            rooms[roomId] = [[], [], ["NONE", "NONE"], ["Fly", "RuinBeatle", "RuinBeatle"]]
+            rooms[roomId] = [[], [], ["NONE", "NONE"], randomEnemies(copy.deepcopy(Ecombs)), makeProps(), isDarkInRoom]
             
 def encaseRoom(roomId, theImages):
     for i in range(0, width // 36):
@@ -822,8 +965,14 @@ def encaseRoom(roomId, theImages):
     for i in range(1, height // 36):
         newWall(random.choice(theImages), ((width // 36) - 1) * 36, i * 36, roomId)
 
+tileSets = [
+    [[r"images\walls\tran\wallTranPlain.png", 15], [r"images\walls\tran\wallTranText1.png", 2], [r"images\walls\tran\wallTranText2.png", 1]], 
+]
+def randomTiles(t):
+    return randomWallTiles(random.choice(t))
+
 #Walls Below
-encaseRoom("1", randomWallTiles([[r"images\walls\ruin\wallRuinPlain.png", 30], [r"images\walls\ruin\wallRuinDamaged.png", 10], [r"images\walls\ruin\wallRuinOvergrown.png", 10], [r"images\walls\ruin\wallRuinText1.png", 1], [r"images\walls\ruin\wallRuinText2.png", 1]]))
+encaseRoom("1", randomWallTiles([[r"images\walls\tran\wallTranPlain.png", 10], [r"images\walls\tran\wallTranText1.png", 1], [r"images\walls\tran\wallTranText2.png", 1]]))
 #randomWallTiles([[r"images\walls\purple\wallPurple.png", 90], [r"images\walls\purple\wallPurpleText1.png", 1], [r"images\walls\purple\wallPurpleEye.png", 1], [r"images\walls\purple\wallPurpleText2.png", 1]])
 #randomWallTiles([[r"images\walls\ruin\wallRuinPlain.png", 30], [r"images\walls\ruin\wallRuinDamaged.png", 10], [r"images\walls\ruin\wallRuinOvergrown.png", 10], [r"images\walls\ruin\wallRuinText1.png", 1], [r"images\walls\ruin\wallRuinText2.png", 1]])
 #randomWallTiles([[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]])
@@ -838,6 +987,56 @@ newDoor((((width // 36) * 36) - 36) / 2, 0, "1", "NONE", "a", "b", "UP", "DEMON"
 #newDoor(((width // 36) * 36) - 36, (((height // 36) * 36) - 36) / 2, "1", "NONE", "d", "a", "RIGHT", "NORM")
 #newDoor(108, ((height // 36) * 36) - 36, "2", "1", "b", "a", "DOWN")
 
+#___SET_FLOOR____
+def setFloorSets(f):
+    global tileSets, Ecombs, propTypes, isDarkInRoom
+    if f == "ruin":
+        isDarkInRoom = False
+        tileSets = [
+            [[r"images\walls\ruin\wallRuinPlain.png", 30], [r"images\walls\ruin\wallRuinDamaged.png", 10], [r"images\walls\ruin\wallRuinOvergrown.png", 10], [r"images\walls\ruin\wallRuinText1.png", 1], [r"images\walls\ruin\wallRuinText2.png", 1]],
+            [[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]],
+            [[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]],
+            [[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]],
+            [[r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinLeaves_1.png", 3], [r"images\walls\ruin\wallRuinLeaves_2.png", 2], [r"images\walls\ruin\wallRuinOvergrown2.png", 1], [r"images\walls\ruin\wallRuinOvergrown3.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]]
+        ]
+        Ecombs = [
+            ["Fly", "RuinBeatle", "RuinBeatle"],
+            ["RedRuinBeatle", "RedRuinBeatle", "RuinBeatle", "GreenRuinBeatle"],
+            ["Fly", "RedRuinBeatle", "RedRuinBeatle"],
+            ["RedRuinBeatle", "RedRuinBeatle"],
+            ["RuinBeatle", "RuinBeatle", "GreenRuinBeatle"],
+            ["RuinBeatle", "GreenRuinBeatle"],
+            ["RedRuinBeatle", "RedRuinBeatle"],
+            ["Fly", "RuinBeatle"],
+            ["RuinBeatle", "RuinBeatle"],
+            ["Fly", "Fly"],
+            ["Fly", "Fly"],
+            ["GreenRuinBeatle"]
+        ]
+        propTypes = [
+            [[cropImage(r"images\props\pots\clayPot.png"), cropImage(r"images\props\pots\clayPotOvergrown.png"), cropImage(r"images\props\pots\clayPotBroken.png")], 0],
+            [[cropImage(r"images\props\pots\clayPotOvergrown.png"), cropImage(r"images\props\pots\clayPotBroken.png")], 0],
+            [[cropImage(r"images\props\lights\light1.png"), cropImage(r"images\props\lights\light1Broken.png")], 100]
+        ]
+        
+    if f == "crypt":
+        isDarkInRoom = True
+        
+        tileSets = [
+            [[r"images\walls\crypt\wallCryptPlain.png", 30], [r"images\walls\crypt\wallCryptBroken.png", 5], [r"images\walls\crypt\wallCryptShelf2.png", 1], [r"images\walls\crypt\wallCryptShelf3.png", 1], [r"images\walls\crypt\wallCryptShelf4.png", 1], [r"images\walls\crypt\wallCryptShelf5.png", 1]],
+            
+        ]
+        Ecombs = [
+            ["Bones", "BonesMage"],
+            ["BonesDarkMage"],
+        ]
+        propTypes = [
+            [[cropImage(r"images\props\pots\bonePile.png"), cropImage(r"images\props\pots\bonePileBroken.png")], 0],
+            [[cropImage(r"images\props\lights\light1.png"), cropImage(r"images\props\lights\light1Broken.png")], 80],
+            [[cropImage(r"images\props\lights\bonePileCandle.png"), cropImage(r"images\props\lights\bonePileCandleBroken.png")], 75]
+        ]
+
+setFloorSets("ruin")
 
 if len(wallsGroup) == 0 and len(doorsGroup) == 0:
     loadRoom(currentRoom)
@@ -846,10 +1045,13 @@ RUNNING = True
 while RUNNING == True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            RUNNING = False
-            pygame.display.quit()
-            pygame.quit()
-            sys.exit()
+            if gamePaused == True:
+                RUNNING = False
+                pygame.display.quit()
+                pygame.quit()
+                sys.exit()
+            else:
+                gamePaused = True
             
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_p:
@@ -945,7 +1147,11 @@ while RUNNING == True:
 
                 if findLivesLeft() <= 0:
                     gamePaused = True
-                
+                    
+            for a in propsGroup:
+                blocks_hit_list = pygame.sprite.spritecollide(a, wallsGroup, False)
+                for i in blocks_hit_list:
+                    a.kill()
         if event.type == 6:
             if gamePaused == True:
                 for i in theColBlock:
@@ -965,7 +1171,7 @@ while RUNNING == True:
     pygame.time.set_timer(3, 10)
     pygame.time.set_timer(4, 10)
     pygame.time.set_timer(6, 10)
-    screen.fill(black)
+    screen.fill((15, 15, 15))
     #print(wallsGroup)#DEBUG
     for i in wallsGroup.sprites():
         if displayPlayfeild == True:
@@ -980,18 +1186,45 @@ while RUNNING == True:
             for b in doorOverlayGroup:
                 b.kill()
     doorOverlayGroup.draw(screen)
-    for i in healthBar:
-        screen.blit(i.image, i.rect)
     bodysGroup.draw(screen)
     propsGroup.draw(screen)
     screen.blit(blueMan.image, blueMan.rect)
     enemysGroup.draw(screen)
     projectilesGroup.draw(screen)
     enemysGroup.draw(screen)
+
+    def drawDarkness():
+        if rooms[currentRoom][5] == True:
+            surf = pygame.Surface((width, height))
+            img = pygame.Surface((width, height))
+            surf.fill((0, 0, 0))
+            pygame.draw.circle(img, (225,0,225),(blueMan.rect.x + 16, blueMan.rect.y + 16), 100)
+            for m in projectilesGroup:
+                pygame.draw.circle(img, (225,0,225),(m.rect.x + (m.image.get_width() // 2), m.rect.y + (m.image.get_height() // 2)), 40)
+            
+            for m in propsGroup:
+                if not m.hasLight == False and m.isBroken == False:
+                    pygame.draw.circle(img, (225,0,225),(m.rect.x + (m.image.get_width() // 2), m.rect.y + (m.image.get_height() // 2)), m.hasLight)
+
+            for m in enemysGroup:
+                if not m.hasLight == False:
+                    pygame.draw.circle(img, (225,0,225),(m.rect.x + (m.image.get_width() // 2), m.rect.y + (m.image.get_height() // 2)), m.hasLight)
+
+
+            surf.set_colorkey((225,0,225))
+            #surf.set_alpha(50)
+            surf.blit(img, (0,0))
+            screen.blit(surf, (0,0))
+            
+    drawDarkness()
+    for i in healthBar:
+        screen.blit(i.image, i.rect)
+    
     #Menu Screen Items Below
     if gamePaused == True:
         #if not currMusicPlaying == musicList[1]:
             #changeMusic(musicList[1])
+
         screen.blit(menuShade.image, menuShade.rect)
         screen.blit(titleShade.image, titleShade.rect)
         borderTilesGroup.draw(screen)
@@ -1011,5 +1244,6 @@ while RUNNING == True:
     #if gamePaused == True:
         #theColBlock.draw(screen)
     #screen.blit(mouseColBox.image, mouseColBox.rect)
+    
     pygame.display.flip()
     
