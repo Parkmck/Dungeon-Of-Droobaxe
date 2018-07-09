@@ -71,7 +71,19 @@ def cropImage(im, transparency=0):
 
 #darkness = Surface(width, height)
 #darkness.fill((0,0,0))
-           
+
+#___LOAD_SHEETS___
+def newTileSheet(im, tw, th, upTileNum, acrossTileNum):
+    tileImg = pygame.image.load(im).convert_alpha()
+    tileImages = []
+    for a in range(upTileNum):
+        for b in range(acrossTileNum):
+            surf = pygame.Surface((tw,th),pygame.SRCALPHA)
+            surf.set_colorkey((255,0,255))
+            surf.blit(tileImg,(-b*tw,-a*th))
+            surf = pygame.transform.scale(surf,(tw, th))
+            tileImages.append(surf)
+    return tileImages
 #___SET_ICON___
 gameIcon = cropImage(r"images\gameIcon.png")
 pygame.display.set_icon(gameIcon)
@@ -251,7 +263,7 @@ class heart:
 
     def thumpHeart(self):
         lastImage = self.image
-        self.image = cropImage(r"images\health\heartThump.png")
+        self.image = cropImage(r"images\health\heartFull.png")
         #pygame.time.wait(1000)
         self.image = lastImage
 
@@ -916,7 +928,10 @@ def loadRoom(theId):
 class wall(pygame.sprite.Sprite):
     def __init__(self, im, rx, ry):
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.image.load(im)
+        if isinstance(im, str):
+            self.image = pygame.image.load(im)
+        else:
+            self.image = im
         self.rect = self.image.get_rect()
         self.rect.x = rx
         self.rect.y = ry
@@ -971,8 +986,9 @@ tileSets = [
 def randomTiles(t):
     return randomWallTiles(random.choice(t))
 
+tranTiles = newTileSheet(r"images\walls\tran\tran.png", 36, 36, 3, 5)
 #Walls Below
-encaseRoom("1", randomWallTiles([[r"images\walls\tran\wallTranPlain.png", 10], [r"images\walls\tran\wallTranText1.png", 1], [r"images\walls\tran\wallTranText2.png", 1]]))
+encaseRoom("1", randomWallTiles([[tranTiles[0], 10], [tranTiles[1], 1], [tranTiles[2], 1]]))
 #randomWallTiles([[r"images\walls\purple\wallPurple.png", 90], [r"images\walls\purple\wallPurpleText1.png", 1], [r"images\walls\purple\wallPurpleEye.png", 1], [r"images\walls\purple\wallPurpleText2.png", 1]])
 #randomWallTiles([[r"images\walls\ruin\wallRuinPlain.png", 30], [r"images\walls\ruin\wallRuinDamaged.png", 10], [r"images\walls\ruin\wallRuinOvergrown.png", 10], [r"images\walls\ruin\wallRuinText1.png", 1], [r"images\walls\ruin\wallRuinText2.png", 1]])
 #randomWallTiles([[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]])
@@ -990,14 +1006,15 @@ newDoor((((width // 36) * 36) - 36) / 2, 0, "1", "NONE", "a", "b", "UP", "DEMON"
 #___SET_FLOOR____
 def setFloorSets(f):
     global tileSets, Ecombs, propTypes, isDarkInRoom
+    ruinTiles = newTileSheet(r"images\walls\ruin\ruin.png", 36, 36, 3, 5)
     if f == "ruin":
         isDarkInRoom = False
         tileSets = [
-            [[r"images\walls\ruin\wallRuinPlain.png", 30], [r"images\walls\ruin\wallRuinDamaged.png", 10], [r"images\walls\ruin\wallRuinOvergrown.png", 10], [r"images\walls\ruin\wallRuinText1.png", 1], [r"images\walls\ruin\wallRuinText2.png", 1]],
-            [[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]],
-            [[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]],
-            [[r"images\walls\ruin\wallRuinPlain.png", 3], [r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]],
-            [[r"images\walls\ruin\wallRuinDamaged.png", 1], [r"images\walls\ruin\wallRuinLeaves_1.png", 3], [r"images\walls\ruin\wallRuinLeaves_2.png", 2], [r"images\walls\ruin\wallRuinOvergrown2.png", 1], [r"images\walls\ruin\wallRuinOvergrown3.png", 1], [r"images\walls\ruin\wallRuinOvergrown.png", 1]]
+            [[ruinTiles[6], 30], [ruinTiles[0], 10], [ruinTiles[3], 10], [ruinTiles[7], 1], [ruinTiles[8], 1]],
+            [[ruinTiles[6], 3], [ruinTiles[0], 1], [ruinTiles[3], 1]],
+            [[ruinTiles[6], 3], [ruinTiles[0], 1], [ruinTiles[3], 1]],
+            [[ruinTiles[6], 3], [ruinTiles[0], 1], [ruinTiles[3], 1]],
+            [[ruinTiles[0], 1], [ruinTiles[1], 3], [ruinTiles[2], 2], [ruinTiles[4], 1], [ruinTiles[5], 1], [ruinTiles[3], 1]]
         ]
         Ecombs = [
             ["Fly", "RuinBeatle", "RuinBeatle"],
