@@ -24,7 +24,7 @@ sounds = ["sounds/dig_2.wav", "sounds/dig_0.wav", "sounds/Item_10.wav", "sounds/
         
 #___MUSIC___
 musicPosition = 0
-musicList = [r"sounds/background.mp3", r"sounds/396082__romariogrande__space-pea-lava-dance.mp3",  r"sounds/388337__adnova__wishing.wav", r"sounds/Droobaxe Main.mp3"]
+musicList = [r"sounds/background.mp3", r"sounds/Droobaxe Main.mp3"]
 currMusicPlaying = r"sounds/background.mp3"
 pygame.mixer.music.load(r"sounds/background.mp3")
 pygame.mixer.music.play(-1)
@@ -1299,7 +1299,7 @@ def setFloorSets(f):
 
 def atStartup():
     global gamePaused, gameStarted
-    changeMusic(musicList[3])
+    changeMusic(musicList[1])
     gamePaused = True
     gameStarted = False
     if len(slidingTitleScreenTileGroup) <= 0:
